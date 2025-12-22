@@ -1,0 +1,26 @@
+name: 01 - Hello CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print greeting
+        run: echo "Hello from GitHub Actions"
+
+      - name: Display OS information
+        run: uname -a
+
+      - name: Display current user and working directory
+        run: |
+          whoami
+          pwd
+
+      - name: List files (repository not checked out yet)
+        run: ls -la
