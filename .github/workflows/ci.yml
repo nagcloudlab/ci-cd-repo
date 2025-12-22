@@ -1,4 +1,4 @@
-name: 01 - Hello CI
+name: 02 - Checkout Repository
 
 on:
   push:
@@ -7,20 +7,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  hello:
+  checkout-demo:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Print greeting
-        run: echo "Hello from GitHub Actions"
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Display OS information
-        run: uname -a
-
-      - name: Display current user and working directory
-        run: |
-          whoami
-          pwd
-
-      - name: List files (repository not checked out yet)
+      - name: Show repository files
         run: ls -la
+
+      - name: Show current directory
+        run: pwd
