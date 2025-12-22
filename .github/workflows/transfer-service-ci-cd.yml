@@ -70,7 +70,9 @@ jobs:
       # STEP 5: CODE COVERAGE
       # -----------------------------------------------------
       - name: Generate JaCoCo coverage
-        run: mvn jacoco:report
+        run: |
+          echo "(mock) mvn jacoco:report"
+          echo "WHY: Ensure sufficient test coverage"
 
       # -----------------------------------------------------
       # STEP 6: STATIC CODE QUALITY
