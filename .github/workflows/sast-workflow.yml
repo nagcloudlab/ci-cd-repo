@@ -1,0 +1,23 @@
+# .github/workflows/weekly-security-scan.yml
+name: Weekly Security Scan
+on:
+  schedule:
+    - cron: '0 0 * * 0'   # Every Sunday
+  workflow_dispatch:      # Manual trigger
+jobs:
+  security-scan:
+    name: "Weekly Security Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Run Security Scan
+        run: |
+          echo "(mock) Running security scan tools..."
+          echo "Tools could include Snyk, OWASP ZAP, etc."
+          echo "Generating security report..."
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
