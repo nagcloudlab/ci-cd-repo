@@ -1,0 +1,267 @@
+name: Transfer Service – CI/CD (UPI Training)
+
+# =========================================================
+# TRIGGERS
+# =========================================================
+on:
+  push:
+    branches: [ main, develop, "feature/**" ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+# =========================================================
+# SECURITY – LEAST PRIVILEGE
+# =========================================================
+permissions:
+  contents: read
+
+
+# =========================================================
+# GLOBAL VARIABLES
+# =========================================================
+env:
+  APP_NAME: transfer-service
+  DOMAIN: upi-money-transfer
+  JAVA_VERSION: "17"
+
+
+# =========================================================
+# LEVEL 22 – BASIC CI PIPELINE
+# =========================================================
+jobs:
+
+  ci-basic:
+    name: "L22 - Basic CI (Build, Unit Test, Quality Gates)"
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------
+      # STEP 1: SOURCE CODE
+      # -----------------------------------------------------
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------
+      # STEP 2: JAVA SETUP
+      # -----------------------------------------------------
+      - name: Setup Java 17
+        run: |
+          echo "(mock) Installing Java ${JAVA_VERSION}"
+          echo "WHY: Build must be reproducible"
+          echo "LATER: actions/setup-java@v4"  
+
+      # -----------------------------------------------------
+      # STEP 3: COMPILE (FAST FEEDBACK)
+      # -----------------------------------------------------
+      - name: Compile application
+        run: |
+          echo "(mock) mvn -B clean compile"
+          echo "WHY: Catch syntax & dependency issues early"    
+
+      # -----------------------------------------------------
+      # STEP 4: UNIT TESTS (FAIL FAST)
+      # -----------------------------------------------------
+      - name: Run unit tests (JUnit)
+        run: |
+          echo "(mock) mvn -B test"
+          echo "WHY: Business rules validation"
+          echo "Coverage starts here"
+    
+      # -----------------------------------------------------
+      # STEP 5: CODE COVERAGE
+      # -----------------------------------------------------
+      - name: Generate JaCoCo coverage
+        run: |
+          echo "(mock) mvn jacoco:report"
+          echo "TARGET: >= 80% line coverage"
+          echo "WHY: Prevent untested logic"
+
+      # -----------------------------------------------------
+      # STEP 6: STATIC CODE QUALITY
+      # -----------------------------------------------------
+      - name: SonarQube analysis
+        run: |
+          echo "(mock) mvn sonar:sonar"
+          echo "Quality Gates:"
+          echo "- Coverage >= 80%"
+          echo "- No critical bugs"
+          echo "- No high vulnerabilities"  
+
+      # -----------------------------------------------------
+      # STEP 7: SAST – SECURITY SHIFT-LEFT
+      # -----------------------------------------------------
+      - name: Static security analysis
+        run: |
+          echo "(mock) SpotBugs + FindSecBugs"
+          echo "(mock) OWASP Dependency Check"
+          echo "WHY: Security before integration" 
+
+      # -----------------------------------------------------
+      # STEP 8: REPORTS
+      # -----------------------------------------------------
+      - name: Publish CI reports
+        run: |
+          echo "(mock) Upload Surefire reports"
+          echo "(mock) Upload JaCoCo reports"
+          echo "WHY: Debugging + audit trail"
+       
+
+# =========================================================
+# LEVEL 23 – EXTENDED CI PIPELINE
+# =========================================================
+
+  ci-extended:
+    name: "L23 – Extended CI (Integration, Contracts, Containers)"
+    runs-on: ubuntu-latest
+    needs: ci-basic
+
+    steps:
+      # -----------------------------------------------------
+      # STEP 9: TESTCONTAINERS
+      # -----------------------------------------------------
+      - name: Integration tests (Testcontainers)
+        run: |
+          echo "(mock) Start PostgreSQL container"
+          echo "(mock) Spring Boot integration tests"
+          echo "WHY: H2 != PostgreSQL"
+
+      # -----------------------------------------------------
+      # STEP 10: CONTRACT TESTS
+      # -----------------------------------------------------
+      - name: Contract tests (Provider)
+        run: |
+          echo "(mock) Spring Cloud Contract verification"
+          echo "WHY: API compatibility guarantee"
+
+      # -----------------------------------------------------
+      # STEP 11: API TESTING
+      # -----------------------------------------------------
+      - name: API tests (Newman)
+        run: |
+          echo "(mock) Run Postman collection"
+          echo "Validate:"
+          echo "- Status codes"
+          echo "- Error schemas"
+          echo "- Auth handling"
+
+      # -----------------------------------------------------
+      # STEP 12: MUTATION TESTING
+      # -----------------------------------------------------
+      - name: Mutation testing (conditional)
+        run: |
+          echo "(mock) PIT mutation tests"
+          echo "WHY: Tests must catch bugs"
+          echo "NOTE: Not on every commit"    
+
+      # -----------------------------------------------------
+      # STEP 13: CONTAINERIZATION
+      # -----------------------------------------------------
+      - name: Build Docker image
+        run: |
+          echo "(mock) docker build -t transfer-service:latest"
+          echo "WHY: Immutable deployable unit"
+
+      # -----------------------------------------------------
+      # STEP 14: CONTAINER SECURITY
+      # -----------------------------------------------------
+      - name: Container security scan
+        run: |
+          echo "(mock) Trivy image scan"
+          echo "BLOCK if CRITICAL vulnerabilities"
+
+      # -----------------------------------------------------
+      # STEP 15: REGISTRY PUSH
+      # -----------------------------------------------------
+      - name: Push container image
+        run: |
+          echo "(mock) Push to ECR / ACR"
+          echo "Image tagged with commit SHA"
+        
+# =========================================================
+# LEVEL 24 – PR QUALITY GATES
+# =========================================================
+  pr-quality-gates:
+    name: "L24 - Pull Request Quality Gates"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Enforce PR rules
+        run: |
+          echo "(mock) Branch protection enforced"
+          echo "(mock) CI success required"
+          echo "(mock) SonarQube gate required"
+          echo "(mock) Code review approvals required"
+
+      - name: Coverage regression check
+        run: |
+          echo "(mock) Coverage comparison with main"
+          echo "FAIL if coverage decreases"
+
+      - name: Performance regression check
+        run: |
+          echo "(mock) Baseline performance comparison"
+          echo "FAIL if SLA violated"
+          
+# =========================================================
+# LEVEL 25 – CD PIPELINE (MULTI-ENV)
+# =========================================================
+
+  deploy-dev:
+    name: "Deploy - DEV"
+    runs-on: ubuntu-latest
+    needs: ci-extended
+    environment: dev
+
+    steps:
+      - name: Deploy to DEV
+        run: |
+          echo "(mock) Deploy to AWS ECS / Azure"
+          echo "(mock) Smoke tests"
+          echo "(mock) Health check /actuator/health"
+
+  deploy-qa:
+    name: "Deploy - QA"
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    environment: qa
+
+    steps:
+      - name: Deploy to QA
+        run: |
+          echo "(mock) Full regression suite"
+          echo "(mock) Integration + contract tests"
+          echo "(mock) Baseline performance tests"
+
+  deploy-staging:
+    name: "Deploy - STAGING"
+    runs-on: ubuntu-latest
+    needs: deploy-qa
+    environment: staging
+
+    steps:
+      - name: Deploy to Staging
+        run: |
+          echo "(mock) Manual approval gate"
+          echo "(mock) DAST scan (OWASP ZAP)"
+          echo "(mock) Full load & stress tests"
+          echo "(mock) DB migration dry-run"
+
+  deploy-prod:
+    name: "Deploy - PROD"
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment: prod
+
+    steps:
+      - name: Blue-Green / Canary deployment
+        run: |
+          echo "(mock) Deploy 10% traffic"
+          echo "(mock) Validate metrics"
+          echo "(mock) Deploy 50% traffic"
+          echo "(mock) Deploy 100% traffic"
+          echo "(mock) Auto rollback enabled"
+    
+
+    
