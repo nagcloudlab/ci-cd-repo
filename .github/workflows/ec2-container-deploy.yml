@@ -1,8 +1,9 @@
-name: Deploy Docker to EC2
+name: Deploy Container to EC2
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:  
 
 env:
   EC2_HOST: 15.207.105.64
@@ -18,7 +19,7 @@ jobs:
       packages: write
     
     steps:
-    
+
       - name: Checkout code
         uses: actions/checkout@v4
 
