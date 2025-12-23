@@ -53,6 +53,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}  
+          cache: maven
 
       # -----------------------------------------------------
       # STEP 3: COMPILE (FAST FEEDBACK)

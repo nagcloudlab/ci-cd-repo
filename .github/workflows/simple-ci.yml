@@ -1,3 +1,7 @@
+cd /path/to/ci-cd-repo
+
+# Create the corrected workflow
+cat > .github/workflows/simple-ci.yml << 'EOF'
 name: Simple CI - Build and Push
 
 on:
@@ -37,12 +41,13 @@ jobs:
           cache: 'maven'
       
       # ============================================
-      # 3. BUILD WITH MAVEN (Skip Tests for Now)
+      # 3. BUILD WITH MAVEN (in transfer-service/)
       # ============================================
       - name: 🔨 Build with Maven
         run: |
           echo "Building Spring Boot application..."
-          mvn clean package -DskipTests -B
+          cd transfer-service
+          ./mvnw clean package -DskipTests -B
           echo "✅ Build complete!"
           ls -lh target/*.jar
       
@@ -52,10 +57,10 @@ jobs:
       - name: 🐳 Build Docker Image
         run: |
           echo "Building Docker image..."
-          docker build -t my-spring-app:${{ github.sha }} .
-          docker tag my-spring-app:${{ github.sha }} my-spring-app:latest
+          docker build -t transfer-service:${{ github.sha }} .
+          docker tag transfer-service:${{ github.sha }} transfer-service:latest
           echo "✅ Docker image built!"
-          docker images | grep my-spring-app
+          docker images | grep transfer-service
       
       # ============================================
       # 5. PUSH TO AWS ECR
@@ -75,18 +80,18 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           # Create ECR repository if it doesn't exist
-          aws ecr describe-repositories --repository-names my-spring-app 2>/dev/null || \
-            aws ecr create-repository --repository-name my-spring-app
+          aws ecr describe-repositories --repository-names transfer-service 2>/dev/null || \
+            aws ecr create-repository --repository-name transfer-service
           
           # Tag and push
-          docker tag my-spring-app:latest $ECR_REGISTRY/my-spring-app:${{ github.sha }}
-          docker tag my-spring-app:latest $ECR_REGISTRY/my-spring-app:latest
+          docker tag transfer-service:latest $ECR_REGISTRY/transfer-service:${{ github.sha }}
+          docker tag transfer-service:latest $ECR_REGISTRY/transfer-service:latest
           
-          docker push $ECR_REGISTRY/my-spring-app:${{ github.sha }}
-          docker push $ECR_REGISTRY/my-spring-app:latest
+          docker push $ECR_REGISTRY/transfer-service:${{ github.sha }}
+          docker push $ECR_REGISTRY/transfer-service:latest
           
           echo "✅ Pushed to AWS ECR!"
-          echo "Image: $ECR_REGISTRY/my-spring-app:latest"
+          echo "Image: $ECR_REGISTRY/transfer-service:latest"
       
       # ============================================
       # 6. PUSH TO AZURE ACR
@@ -101,27 +106,29 @@ jobs:
       - name: 📤 Push to Azure ACR
         run: |
           # Create ACR if it doesn't exist
-          ACR_NAME="myspringappacr"
+          ACR_NAME="transferserviceacr"
           
-          az acr list --query "[?name=='$ACR_NAME']" -o tsv || \
-            az acr create --resource-group my-rg --name $ACR_NAME --sku Basic || \
-            echo "ACR might already exist or will be created manually"
+          # Try to create resource group (might exist)
+          az group create --name transfer-rg --location centralindia 2>/dev/null || echo "Resource group exists"
+          
+          # Try to create ACR (might exist)
+          az acr create --resource-group transfer-rg --name $ACR_NAME --sku Basic 2>/dev/null || echo "ACR exists"
           
           # Login to ACR
-          az acr login --name $ACR_NAME || echo "Using az acr login failed, trying docker login..."
+          az acr login --name $ACR_NAME
           
           # Get ACR login server
-          ACR_SERVER=$(az acr show --name $ACR_NAME --query loginServer -o tsv 2>/dev/null || echo "${ACR_NAME}.azurecr.io")
+          ACR_SERVER=$(az acr show --name $ACR_NAME --query loginServer -o tsv)
           
           # Tag and push
-          docker tag my-spring-app:latest $ACR_SERVER/my-spring-app:${{ github.sha }}
-          docker tag my-spring-app:latest $ACR_SERVER/my-spring-app:latest
+          docker tag transfer-service:latest $ACR_SERVER/transfer-service:${{ github.sha }}
+          docker tag transfer-service:latest $ACR_SERVER/transfer-service:latest
           
-          docker push $ACR_SERVER/my-spring-app:${{ github.sha }} || echo "Push might fail if ACR needs manual creation"
-          docker push $ACR_SERVER/my-spring-app:latest || echo "Push might fail if ACR needs manual creation"
+          docker push $ACR_SERVER/transfer-service:${{ github.sha }}
+          docker push $ACR_SERVER/transfer-service:latest
           
           echo "✅ Pushed to Azure ACR!"
-          echo "Image: $ACR_SERVER/my-spring-app:latest"
+          echo "Image: $ACR_SERVER/transfer-service:latest"
       
       # ============================================
       # 7. SUMMARY
