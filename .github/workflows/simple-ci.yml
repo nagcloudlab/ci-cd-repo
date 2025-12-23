@@ -1,3 +1,7 @@
+cd /path/to/ci-cd-repo
+
+# Update the workflow to use the GitHub secret
+cat > .github/workflows/simple-ci.yml << 'EOF'
 name: Simple CI - Build and Push
 
 on:
@@ -100,21 +104,17 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       
       - name: 📤 Push to Azure ACR
+        env:
+          ACR_NAME: ${{ secrets.AZURE_ACR_NAME }}
         run: |
-          # Create ACR if it doesn't exist
-          ACR_NAME="transferserviceacr"
-          
-          # Try to create resource group (might exist)
-          az group create --name transfer-rg --location centralindia 2>/dev/null || echo "Resource group exists"
-          
-          # Try to create ACR (might exist)
-          az acr create --resource-group transfer-rg --name $ACR_NAME --sku Basic 2>/dev/null || echo "ACR exists"
+          echo "Using ACR: $ACR_NAME"
           
           # Login to ACR
           az acr login --name $ACR_NAME
           
           # Get ACR login server
           ACR_SERVER=$(az acr show --name $ACR_NAME --query loginServer -o tsv)
+          echo "ACR Server: $ACR_SERVER"
           
           # Tag and push
           docker tag transfer-service:latest $ACR_SERVER/transfer-service:${{ github.sha }}
@@ -139,4 +139,3 @@ jobs:
           echo "✅ **Azure ACR**: Pushed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-
