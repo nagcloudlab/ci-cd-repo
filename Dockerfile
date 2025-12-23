@@ -2,7 +2,8 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY target/*.jar app.jar
+# Copy JAR from transfer-service/target/
+COPY transfer-service/target/*.jar app.jar
 
 EXPOSE 8080
 

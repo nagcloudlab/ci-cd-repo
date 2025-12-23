@@ -143,3 +143,4 @@ jobs:
           echo "✅ **Azure ACR**: Pushed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
