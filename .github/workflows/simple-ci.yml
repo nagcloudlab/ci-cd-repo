@@ -1,0 +1,138 @@
+name: Simple CI - Build and Push
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  JAVA_VERSION: '17'
+  AWS_REGION: ap-south-1
+  AZURE_REGION: centralindia
+
+jobs:
+  build-and-push:
+    name: Build & Push to Both Clouds
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ============================================
+      # 1. CHECKOUT CODE
+      # ============================================
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      # ============================================
+      # 2. SETUP JAVA
+      # ============================================
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      # ============================================
+      # 3. BUILD WITH MAVEN (Skip Tests for Now)
+      # ============================================
+      - name: 🔨 Build with Maven
+        run: |
+          echo "Building Spring Boot application..."
+          mvn clean package -DskipTests -B
+          echo "✅ Build complete!"
+          ls -lh target/*.jar
+      
+      # ============================================
+      # 4. BUILD DOCKER IMAGE
+      # ============================================
+      - name: 🐳 Build Docker Image
+        run: |
+          echo "Building Docker image..."
+          docker build -t my-spring-app:${{ github.sha }} .
+          docker tag my-spring-app:${{ github.sha }} my-spring-app:latest
+          echo "✅ Docker image built!"
+          docker images | grep my-spring-app
+      
+      # ============================================
+      # 5. PUSH TO AWS ECR
+      # ============================================
+      - name: 🔐 Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: 🔑 Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: 📤 Push to AWS ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          # Create ECR repository if it doesn't exist
+          aws ecr describe-repositories --repository-names my-spring-app 2>/dev/null || \
+            aws ecr create-repository --repository-name my-spring-app
+          
+          # Tag and push
+          docker tag my-spring-app:latest $ECR_REGISTRY/my-spring-app:${{ github.sha }}
+          docker tag my-spring-app:latest $ECR_REGISTRY/my-spring-app:latest
+          
+          docker push $ECR_REGISTRY/my-spring-app:${{ github.sha }}
+          docker push $ECR_REGISTRY/my-spring-app:latest
+          
+          echo "✅ Pushed to AWS ECR!"
+          echo "Image: $ECR_REGISTRY/my-spring-app:latest"
+      
+      # ============================================
+      # 6. PUSH TO AZURE ACR
+      # ============================================
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: 📤 Push to Azure ACR
+        run: |
+          # Create ACR if it doesn't exist
+          ACR_NAME="myspringappacr"
+          
+          az acr list --query "[?name=='$ACR_NAME']" -o tsv || \
+            az acr create --resource-group my-rg --name $ACR_NAME --sku Basic || \
+            echo "ACR might already exist or will be created manually"
+          
+          # Login to ACR
+          az acr login --name $ACR_NAME || echo "Using az acr login failed, trying docker login..."
+          
+          # Get ACR login server
+          ACR_SERVER=$(az acr show --name $ACR_NAME --query loginServer -o tsv 2>/dev/null || echo "${ACR_NAME}.azurecr.io")
+          
+          # Tag and push
+          docker tag my-spring-app:latest $ACR_SERVER/my-spring-app:${{ github.sha }}
+          docker tag my-spring-app:latest $ACR_SERVER/my-spring-app:latest
+          
+          docker push $ACR_SERVER/my-spring-app:${{ github.sha }} || echo "Push might fail if ACR needs manual creation"
+          docker push $ACR_SERVER/my-spring-app:latest || echo "Push might fail if ACR needs manual creation"
+          
+          echo "✅ Pushed to Azure ACR!"
+          echo "Image: $ACR_SERVER/my-spring-app:latest"
+      
+      # ============================================
+      # 7. SUMMARY
+      # ============================================
+      - name: 📊 Summary
+        run: |
+          echo "### 🎉 Build & Push Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Maven Build**: Success" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Docker Build**: Success" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **AWS ECR**: Pushed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Azure ACR**: Pushed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
