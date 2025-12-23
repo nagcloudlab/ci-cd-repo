@@ -1,0 +1,174 @@
+name: Deploy Docker to EC2
+
+on:
+  push:
+    branches: [main]
+
+env:
+  EC2_HOST: 15.207.105.64
+  EC2_USER: ubuntu
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build JAR
+        run: |
+          cd transfer-service
+          mvn clean package -DskipTests
+          echo "✅ JAR built"
+          ls -lh target/*.jar
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Install Docker on EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ env.EC2_USER }}@${{ env.EC2_HOST }} 'bash -s' << 'EOF'
+            if ! command -v docker &> /dev/null; then
+              echo "🐳 Installing Docker..."
+              
+              # Update packages
+              sudo apt-get update
+              
+              # Install prerequisites
+              sudo apt-get install -y \
+                ca-certificates \
+                curl \
+                gnupg \
+                lsb-release
+              
+              # Add Docker GPG key
+              sudo mkdir -p /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+                sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+              
+              # Add Docker repository
+              echo \
+                "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+                $(lsb_release -cs) stable" | \
+                sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+              
+              # Install Docker
+              sudo apt-get update
+              sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+              
+              # Add user to docker group
+              sudo usermod -aG docker $USER
+              
+              # Start Docker
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              
+              echo "✅ Docker installed"
+            else
+              echo "✅ Docker already installed"
+            fi
+            
+            docker --version
+          EOF
+
+      - name: Login to GitHub Registry on EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ env.EC2_USER }}@${{ env.EC2_HOST }} 'bash -s' << 'EOF'
+            echo "${{ secrets.GITHUB_TOKEN }}" | \
+              sudo docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+            echo "✅ Logged in to registry"
+          EOF
+
+      - name: Stop and remove old container
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ env.EC2_USER }}@${{ env.EC2_HOST }} 'bash -s' << 'EOF'
+            echo "🛑 Stopping old container..."
+            sudo docker stop transfer-service || true
+            sudo docker rm transfer-service || true
+            echo "✅ Old container removed"
+          EOF
+
+      - name: Pull and run new container
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ env.EC2_USER }}@${{ env.EC2_HOST }} 'bash -s' << 'EOF'
+            echo "📦 Pulling latest image..."
+            sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            
+            echo "🚀 Starting new container..."
+            sudo docker run -d \
+              --name transfer-service \
+              --restart unless-stopped \
+              -p 8080:8080 \
+              -e SPRING_PROFILES_ACTIVE=prod \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            
+            echo "✅ Container started"
+            sudo docker ps
+          EOF
+
+      - name: Wait for container startup
+        run: sleep 15
+
+      - name: Health Check
+        run: |
+          echo "🏥 Checking health..."
+          for i in {1..10}; do
+            if curl -sf http://${{ env.EC2_HOST }}:8080/actuator/health; then
+              echo ""
+              echo "✅ Application healthy!"
+              exit 0
+            fi
+            echo "Attempt $i/10..."
+            sleep 5
+          done
+          echo "❌ Health check failed"
+          exit 1
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ env.EC2_USER }}@${{ env.EC2_HOST }} \
+            "sudo docker logs --tail 100 transfer-service"
